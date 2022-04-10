@@ -1,3 +1,27 @@
+# Importing Packages
+import math
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.metrics.pairwise import euclidean_distances
+import scipy
+import numpy as np
+import scipy
+import matplotlib
+import matplotlib.pyplot as plt
+from matplotlib import cm
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+import matplotlib.gridspec as gridspec
+import seaborn as sns
+from scipy.stats import norm
+from warnings import catch_warnings
+from warnings import simplefilter
+import random
+
+# Set matplotlib and seaborn plotting style
+sns.set_style('darkgrid')
+np.random.seed(40)
+
 # This tool aims to provide a simple visualization for low-dimensional optimization problems.
 
 # The search space represents the domain in which samples may be drawn from
@@ -6,8 +30,6 @@
 # The n-dimensional space must be sampled adequately
 
 # The surrogate function will be created with the goal of improving computational efficiency
-
-# The acquisition function is the tool that leverages the posterior to select the next sample query point
 
 # The algorithm may be summarized through the following steps
 #   1. Collect initial sample data
@@ -20,25 +42,21 @@
 ####################################
 #   EXAMPLE: 1. ONE-DIMENSIONAL    #
 ####################################
-import math
-import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.gaussian_process import GaussianProcessRegressor
-
 
 # Define the objective function. Note, this will typically be a black-box function.
 # If we have access to gradient information, gradient-based solvers will be a better approach.
-# For this example, a modified sin function will be used. This function has 5 peaks.
+# For this example, a modified sin function will be used.
 def objective_function(x):
-    y = x**2 * math.sin(5*math.pi*x)**6
+    #y = x**2 * math.sin(5*math.pi*x)**6
+    y = (2*math.sin(x))
     return y
 
-# Let's visualise this curve between x=0 and x=1
-X = np.linspace(0,1,1000)
+# Let's visualise this curve between x=-6 and x=6
+X = np.linspace(-6,6,1000)
 y = [objective_function(x) for x in X]
 plt.plot(X,y)
 
-# To test our algorithm, lets first find the true maximum solutions
+# To test our algorithm, lets first find the true maximum solution
 # Note that in practise, we would not have access to this information
 x_best_index = np.argmax(y)
 
@@ -53,5 +71,279 @@ plt.show()
 
 # First, we need to select our Kernel function K (also known as the covariance function)
 # The Kernel function calculates the GP’s covariance between data points
-# By default, the prior mean is assumed to be constant and zero
-model = GaussianProcessRegressor()
+
+
+######################################
+#    DEFINITION: KERNEL FUNCTION     #
+######################################
+
+# Define the kernel function: exponentiated quadratic
+# This function returns the square-root of the distance between xa and xb * (-0.5)
+def exponentiated_quadratic(xa, xb):
+    """Exponentiated quadratic  with σ=1"""
+
+    sq_norm = -0.5 * scipy.spatial.distance.cdist(xa, xb, 'sqeuclidean')
+    return np.exp(sq_norm)
+
+
+######################################
+#   VISUALIZATION: KERNEL FUNCTION   #
+######################################
+
+# Let's visualise the kernel function.
+# Diagonal entries = the variance
+# Non-diagonal entries = the covariance between variables
+def visualise_kernel():
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7, 3))
+    xlim = (-3, 3)
+    # Expand the shape of the array
+    X = np.expand_dims(np.linspace(*xlim, 25), 1)
+    # Calculate the covariance matrix
+    Σ = exponentiated_quadratic(X, X)
+    # Plot covariance matrix
+    im = ax1.imshow(Σ, cmap=cm.YlGnBu)
+    cbar = plt.colorbar(
+        im, ax=ax1, fraction=0.045, pad=0.05)
+    cbar.ax.set_ylabel('$k(x,x)$', fontsize=10)
+    ax1.set_title((
+        'Exponentiated quadratic \n'
+        'covariance matrix'))
+    ax1.set_xlabel('x', fontsize=13)
+    ax1.set_ylabel('x', fontsize=13)
+    ticks = list(range(xlim[0], xlim[1]+1))
+    ax1.set_xticks(np.linspace(0, len(X)-1, len(ticks)))
+    ax1.set_yticks(np.linspace(0, len(X)-1, len(ticks)))
+    ax1.set_xticklabels(ticks)
+    ax1.set_yticklabels(ticks)
+    ax1.grid(False)
+
+    # Show covariance with X=0
+    xlim = (-4, 4)
+    X = np.expand_dims(np.linspace(*xlim, num=50), 1)
+    zero = np.array([[0]])
+    Σ0 = exponentiated_quadratic(X, zero)
+    # Make the plots
+    ax2.plot(X[:,0], Σ0[:,0], label='$k(x,0)$')
+    ax2.set_xlabel('x', fontsize=13)
+    ax2.set_ylabel('covariance', fontsize=13)
+    ax2.set_title((
+        'Exponentiated quadratic  covariance\n'
+        'between $x$ and $0$'))
+    # ax2.set_ylim([0, 1.1])
+    ax2.set_xlim(*xlim)
+    ax2.legend(loc=1)
+
+    fig.tight_layout()
+    plt.show()
+
+visualise_kernel()
+
+
+
+
+######################################
+#   EXAMPLE: SAMPLING FROM PRIOR     #
+######################################
+
+def prior_samples():
+    # Let's choose how many points we want to sample for each function
+    prior_sampling = 50
+    # Let's choose how many functions we want to draw
+    no_functions = 6
+    # Let's create a regular interval of points to draw
+    X_example = np.linspace(-6,6,prior_sampling)
+    # Reshape the array into a 50x1
+    X_example = np.expand_dims(X_example,1)
+    # Calculate the kernel function output for each pair within X and X
+    Σ = exponentiated_quadratic(X_example,  X_example)  # Kernel of data points
+
+    # Randomly sample the prior at the points
+    # Mean function is an array of zeros for each data point
+    # Kernel function has been calculated
+    # .multivariate_normal will draw random samples
+    y_example = np.random.multivariate_normal(
+    mean=np.zeros(prior_sampling), cov=Σ,
+    size= no_functions)
+
+    # Each array in Y is one of the functions to be plotted
+    for i in range(no_functions):
+        plt.plot(X_example, y_example[i], linestyle='-', marker='o', markersize=3)
+
+    plt.title((
+        '6 different function realizations at 50 points\n'
+        'sampled from prior: GP with exponentiated quadratic kernel'))
+    plt.show
+
+prior_samples()
+
+
+######################################
+#   APPLICATION: GAUSSIAN PROCESS    #
+######################################
+
+# Gaussian process posterior
+def GP(X1, y1, X2, kernel_func):
+    """
+    Calculate the posterior mean μ2 and posterior covariance matrix Σ2 for y2
+    based on the corresponding input X2, the observations (X1, y1),
+    and the prior kernel function.
+    """
+
+    print("X1")
+    print(X1)
+    print(X1.shape)
+    print("y1")
+    print(y1)
+    print(y1.shape)
+    print("X2")
+    print(X2)
+    print(X2.shape)
+
+    # Kernel of the observations
+    Σ11 = kernel_func(X1, X1)
+    # Kernel of observations vs to-predict
+    Σ12 = kernel_func(X1, X2)
+    # Σ12 Σ22 ^-1
+    solved = scipy.linalg.solve(Σ11, Σ12, assume_a='pos').T
+
+    # Compute posterior mean
+    # μ2 = 0 + Σ12 Σ22 ^-1 (y1 - 0)
+    # @ is simply used for matrix multiplication
+    μ2 = solved @ y1
+    # Compute the posterior covariance
+    # Σ2 = Σ22 - Σ12 Σ22 ^-1 Σ12
+    Σ22 = kernel_func(X2, X2)
+    Σ2 = Σ22 - (solved @ Σ12)
+    return μ2, Σ2  # mean, covariance
+
+# Compute the posterior mean and covariance
+def posterior_mean_and_covariance():
+    # We want to regress on our objective function
+    f_sin = lambda x: (np.sin(x)).flatten()
+
+    n1 = 8  # Number of points to condition on (training points)
+    n2 = 75  # Number of points in posterior (test points)
+    ny = 5  # Number of functions that will be sampled from the posterior
+    domain = (-6, 6)
+
+    # Sample observations (X1, y1) on the function
+    X1 = np.random.uniform(domain[0]+2, domain[1]-2, size=(n1, 1))
+    y1 = np.asarray([objective_function(x) for x in X1])
+    y1 = np.reshape(y1, n1)
+
+    # X2 will be the uniform prediction points to capture function
+    X2 = np.linspace(domain[0], domain[1], n2).reshape(-1, 1)
+
+    # Compute posterior mean and covariance
+    μ2, Σ2 = GP(X1, y1, X2, exponentiated_quadratic)
+    # Compute the standard deviation at the test points to be plotted
+    # Standard deviation is the square root of diagonal entries of Σ
+    σ2 = np.sqrt(np.diag(Σ2))
+
+    # Draw some samples of the posterior
+    y2 = np.random.multivariate_normal(mean=μ2, cov=Σ2, size=ny)
+
+    # Plot the postior distribution and some samples
+    fig, (ax1, ax2) = plt.subplots(
+        nrows=2, ncols=1, figsize=(6, 6))
+
+    graphs = np.asarray([objective_function(x) for x in X2])
+    graphs = np.reshape(graphs, len(X2))
+
+    # Plot the distribution of the function (mean, covariance)
+    ax1.plot(X2, graphs, 'b--', label='$sin(x)$')
+    ax1.fill_between(X2.flat, μ2-2*σ2, μ2+2*σ2, color='red',
+                     alpha=0.15, label='$2 \sigma_{2|1}$')
+    ax1.plot(X2, μ2, 'r-', lw=2, label='$\mu_{2|1}$')
+    ax1.plot(X1, y1, 'ko', linewidth=2, label='$(x_1, y_1)$')
+    ax1.set_xlabel('$x$', fontsize=13)
+    ax1.set_ylabel('$y$', fontsize=13)
+    ax1.set_title('Distribution of posterior and prior data.')
+    ax1.axis([domain[0], domain[1], -10, 10])
+    ax1.legend()
+    # Plot some samples from this function
+    ax2.plot(X2, y2.T, '-')
+    ax2.set_xlabel('$x$', fontsize=13)
+    ax2.set_ylabel('$y$', fontsize=13)
+    ax2.set_title('5 different function realizations from posterior')
+    ax1.axis([domain[0], domain[1], -10, 10])
+    ax2.set_xlim([-6, 6])
+    plt.tight_layout()
+    plt.show()
+
+    # Let's record our best result
+    best_μ = np.amax(μ2)
+
+    return best_μ,X2, μ2
+
+prev_best,X_data,μ_data = posterior_mean_and_covariance()
+
+
+######################################
+#   INTRODUCE ACQUISITION FUNCTION   #
+######################################
+
+def acquisition_func(X1,y1, X2, prev_best):
+
+    # Compute posterior mean and covariance
+    μ2, Σ2 = GP(X1, y1, X2, exponentiated_quadratic)
+    std = np.sqrt(np.diag(Σ2))
+
+    # Plug in the PI formula to get probability of improvement at the samples.
+    # We add a (very) small number to std to avoid dividing by zero
+    P_I = (μ2 - prev_best)/(std + 1E-10)
+    # Let's calculate the cumulative probability of every entry in P_I
+    P_I = norm.cdf(P_I)
+    return P_I
+
+
+
+# PLOTTING THE PROBABILITY OF IMPROVEMENT
+
+
+###########################################
+#   PLOTTING PROBABILITY OF IMPROVEMENT   #
+###########################################
+
+n1 = 8  # Number of points to condition on (training points)
+n2 = 75  # Number of points in posterior (test points)
+domain = (-6, 6)
+
+# Sample observations (X1, y1) on the function
+X1 = np.random.uniform(domain[0]+2, domain[1]-2, size=(n1, 1))
+y1 = np.asarray([objective_function(x) for x in X1])
+y1 = np.reshape(y1, n1)
+
+# X2 will be the uniform prediction points to capture function
+X2 = np.linspace(domain[0], domain[1], n2).reshape(-1, 1)
+
+
+prob_improve = acquisition_func(X1,y1, X2, prev_best)
+# Get max index
+index = np.argmax(prob_improve)
+
+# Plot the distribution of the function (mean, covariance)
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(3, 7))
+graphs = np.asarray([objective_function(x) for x in X2])
+graphs = np.reshape(graphs, len(X2))
+
+ax1.plot(X2, graphs, 'b--', label='$sin(x)$')
+ax1.plot(X1, y1, 'ko', linewidth=2, label='$(x_1, y_1)$')
+ax1.plot(X2[index], objective_function(X2[index]), marker="o", markersize=5, color = "red")
+ax1.set_xlabel('$x$', fontsize=13)
+ax1.set_ylabel('$y$', fontsize=13)
+ax1.set_title('.........')
+ax1.axis([domain[0], domain[1], -10, 10])
+ax1.legend()
+
+ax2.plot(X2, prob_improve, 'b-', label='$PI$')
+ax2.plot(X2[index], prob_improve[index],'ko', linewidth=2,)
+ax2.set_xlabel('$...$', fontsize=13)
+ax2.set_ylabel('$...$', fontsize=13)
+ax2.set_title(' ')
+ax2.axis([domain[0], domain[1], -0.5, 0.5])
+ax2.legend()
+
+plt.show()
+
+
