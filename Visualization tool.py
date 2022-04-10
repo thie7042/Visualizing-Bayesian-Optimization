@@ -20,7 +20,7 @@ import random
 
 # Set matplotlib and seaborn plotting style
 sns.set_style('darkgrid')
-np.random.seed(40)
+np.random.seed(20)
 
 # This tool aims to provide a simple visualization for low-dimensional optimization problems.
 
@@ -181,6 +181,20 @@ prior_samples()
 #   APPLICATION: GAUSSIAN PROCESS    #
 ######################################
 
+# Let's first define our initial sampling first
+n1 = 8  # Number of points to condition on (training points)
+#n2 = 75  # Number of points in posterior (number of test points)
+n2 = 200
+domain = (-6, 6)
+
+# Sample observations (X1, y1) on the function
+X1 = np.random.uniform(domain[0] + 2, domain[1] - 2, size=(n1, 1))
+y1 = np.asarray([objective_function(x) for x in X1])
+y1 = np.reshape(y1, n1)
+
+# Let's now define the uniform prediction points to capture function
+X2 = np.linspace(domain[0], domain[1], n2).reshape(-1, 1)
+
 # Gaussian process posterior
 def GP(X1, y1, X2, kernel_func):
     """
@@ -189,15 +203,12 @@ def GP(X1, y1, X2, kernel_func):
     and the prior kernel function.
     """
 
-    print("X1")
-    print(X1)
+    print("____SHAPE X1____")
     print(X1.shape)
-    print("y1")
-    print(y1)
-    print(y1.shape)
-    print("X2")
-    print(X2)
+    print(X1)
+    print("____SHAPE X2____")
     print(X2.shape)
+    print(X2)
 
     # Kernel of the observations
     Σ11 = kernel_func(X1, X1)
@@ -217,22 +228,7 @@ def GP(X1, y1, X2, kernel_func):
     return μ2, Σ2  # mean, covariance
 
 # Compute the posterior mean and covariance
-def posterior_mean_and_covariance():
-    # We want to regress on our objective function
-    f_sin = lambda x: (np.sin(x)).flatten()
-
-    n1 = 8  # Number of points to condition on (training points)
-    n2 = 75  # Number of points in posterior (test points)
-    ny = 5  # Number of functions that will be sampled from the posterior
-    domain = (-6, 6)
-
-    # Sample observations (X1, y1) on the function
-    X1 = np.random.uniform(domain[0]+2, domain[1]-2, size=(n1, 1))
-    y1 = np.asarray([objective_function(x) for x in X1])
-    y1 = np.reshape(y1, n1)
-
-    # X2 will be the uniform prediction points to capture function
-    X2 = np.linspace(domain[0], domain[1], n2).reshape(-1, 1)
+def posterior_mean_and_covariance(X1, y1, X2):
 
     # Compute posterior mean and covariance
     μ2, Σ2 = GP(X1, y1, X2, exponentiated_quadratic)
@@ -241,9 +237,10 @@ def posterior_mean_and_covariance():
     σ2 = np.sqrt(np.diag(Σ2))
 
     # Draw some samples of the posterior
+    ny = 5  # Number of functions that will be sampled from the posterior
     y2 = np.random.multivariate_normal(mean=μ2, cov=Σ2, size=ny)
 
-    # Plot the postior distribution and some samples
+    # Plot the posterior distribution and some samples
     fig, (ax1, ax2) = plt.subplots(
         nrows=2, ncols=1, figsize=(6, 6))
 
@@ -275,8 +272,7 @@ def posterior_mean_and_covariance():
     best_μ = np.amax(μ2)
 
     return best_μ,X2, μ2
-
-prev_best,X_data,μ_data = posterior_mean_and_covariance()
+prev_best,X_new,μ_data = posterior_mean_and_covariance(X1, y1, X2)
 
 
 ######################################
@@ -297,10 +293,6 @@ def acquisition_func(X1,y1, X2, prev_best):
     return P_I
 
 
-
-# PLOTTING THE PROBABILITY OF IMPROVEMENT
-
-
 ###########################################
 #   PLOTTING PROBABILITY OF IMPROVEMENT   #
 ###########################################
@@ -309,18 +301,12 @@ n1 = 8  # Number of points to condition on (training points)
 n2 = 75  # Number of points in posterior (test points)
 domain = (-6, 6)
 
-# Sample observations (X1, y1) on the function
-X1 = np.random.uniform(domain[0]+2, domain[1]-2, size=(n1, 1))
-y1 = np.asarray([objective_function(x) for x in X1])
-y1 = np.reshape(y1, n1)
-
-# X2 will be the uniform prediction points to capture function
-X2 = np.linspace(domain[0], domain[1], n2).reshape(-1, 1)
-
 
 prob_improve = acquisition_func(X1,y1, X2, prev_best)
 # Get max index
 index = np.argmax(prob_improve)
+print("Index is:")
+print(prob_improve)
 
 # Plot the distribution of the function (mean, covariance)
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(3, 7))
@@ -347,3 +333,51 @@ ax2.legend()
 plt.show()
 
 
+#############################################
+#   ITS TIME TO LOOP AND UPDATE OUR PROXY   #
+#############################################
+
+# For ease of use, lets create a larger dataset
+X_data = X1
+Y_data = y1
+
+
+
+# Let's put this all together and iterate 100 times
+for i in range(5):
+
+    print("Iteration: ")
+    print(i)
+
+    prob_improve = acquisition_func(X1, y1, X2, prev_best)
+    index = np.argmax(prob_improve)
+
+
+    # We now know what point we want to query. Let's check its true value
+    print("Index is:")
+    print(index)
+    print(prob_improve)
+
+    y_new = objective_function(X2[index])
+
+    # First, lets see if we're finished our optimization
+    if y_new in y1[:]:
+        break
+
+    # Let's add this new information to our dataset
+    X1 = np.append(X1,X2[index])
+    X1 = np.reshape(X1,(X1.size,1))
+    y1 = np.append(y1,y_new)
+
+    print(y1)
+    print(X1)
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(3, 7))
+    ax1.plot(X,y)
+    ax1.plot(X1, y1, 'ko', linewidth=2, label='$(x_1, y_1)$')
+    plt.show()
+
+print("Maximum: x = %0.3f, y = %0.3f" % (np.amax(X1), np.amax(y1)))
+plt.plot(X,y)
+plt.plot(X1[np.argmax(y1)],np.amax(y1), marker="o", markersize=5, color = "red")
+plt.show()
