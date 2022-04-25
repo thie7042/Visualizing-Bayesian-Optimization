@@ -48,13 +48,13 @@ np.random.seed(20)
 # For this example, a modified sin function will be used.
 def objective_function(x):
     #y = x**2 * math.sin(5*math.pi*x)**6
-    y = (2*math.sin(x))
+    y = x/5 + (x*math.sin(x))
     return y
 
 # Let's visualise this curve between x=-6 and x=6
 X = np.linspace(-6,6,1000)
 y = [objective_function(x) for x in X]
-plt.plot(X,y)
+plt.plot(X,y,label="x/5 + xsin(x)")
 
 # To test our algorithm, lets first find the true maximum solution
 # Note that in practise, we would not have access to this information
@@ -63,7 +63,14 @@ x_best_index = np.argmax(y)
 print('Location of global max: x = %.2f, y = %.2f' % (X[x_best_index], y[x_best_index]))
 print(y[np.argmax(y)])
 
-plt.plot(X[x_best_index],y[np.argmax(y)], marker="o", markersize=5, color = "red")
+plt.plot(X[x_best_index],y[np.argmax(y)], marker="o", markersize=5, color = "red", label="Maxima")
+plt.title((
+    'Target Function f(x) = x/5 + xsin(x)'))
+plt.xlabel("x")
+plt.ylabel("f(x)")
+plt.xlim([-6, 6])
+plt.ylim([-6, 6])
+plt.legend(loc="upper left")
 plt.show()
 
 # We now have a test set-up. Let's create our proxy function
@@ -172,7 +179,8 @@ def prior_samples():
     plt.title((
         '6 different function realizations at 50 points\n'
         'sampled from prior: GP with exponentiated quadratic kernel'))
-    plt.show
+    plt.xlim([-6, 6])
+    plt.show()
 
 prior_samples()
 
@@ -248,7 +256,7 @@ def posterior_mean_and_covariance(X1, y1, X2):
     graphs = np.reshape(graphs, len(X2))
 
     # Plot the distribution of the function (mean, covariance)
-    ax1.plot(X2, graphs, 'b--', label='$sin(x)$')
+    ax1.plot(X2, graphs, 'b--', label='$x/5 + xsin(x)$')
     ax1.fill_between(X2.flat, μ2-2*σ2, μ2+2*σ2, color='red',
                      alpha=0.15, label='$2 \sigma_{2|1}$')
     ax1.plot(X2, μ2, 'r-', lw=2, label='$\mu_{2|1}$')
@@ -313,21 +321,21 @@ fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(3, 7))
 graphs = np.asarray([objective_function(x) for x in X2])
 graphs = np.reshape(graphs, len(X2))
 
-ax1.plot(X2, graphs, 'b--', label='$sin(x)$')
+ax1.plot(X2, graphs, 'b--', label='$x/5 + xsin(x)$')
 ax1.plot(X1, y1, 'ko', linewidth=2, label='$(x_1, y_1)$')
 ax1.plot(X2[index], objective_function(X2[index]), marker="o", markersize=5, color = "red")
 ax1.set_xlabel('$x$', fontsize=13)
 ax1.set_ylabel('$y$', fontsize=13)
-ax1.set_title('.........')
+ax1.set_title('Proxy model')
 ax1.axis([domain[0], domain[1], -10, 10])
 ax1.legend()
 
 ax2.plot(X2, prob_improve, 'b-', label='$PI$')
 ax2.plot(X2[index], prob_improve[index],'ko', linewidth=2,)
-ax2.set_xlabel('$...$', fontsize=13)
-ax2.set_ylabel('$...$', fontsize=13)
-ax2.set_title(' ')
-ax2.axis([domain[0], domain[1], -0.5, 0.5])
+ax2.set_xlabel('$x$', fontsize=13)
+ax2.set_ylabel('$PI$', fontsize=13)
+ax2.set_title('Probability of Improvement')
+ax2.axis([domain[0], domain[1], -0.8, 0.8])
 ax2.legend()
 
 plt.show()
